@@ -6,12 +6,9 @@ ENV POSTGRES_USER=geo_admin
 ENV POSTGRES_PASSWORD=geo_secure_pass_2024
 ENV PGDATA=/var/lib/postgresql/data/pgdata
 
-# Copy initialization scripts and migrations
+# Copy initialization script
 COPY init.sql /docker-entrypoint-initdb.d/
-COPY migrations/ /migrations/
 
-# Create backup directory
-RUN mkdir -p /backups
 
 # Expose PostgreSQL port
 EXPOSE 5432
