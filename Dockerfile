@@ -13,6 +13,3 @@ COPY init.sql /docker-entrypoint-initdb.d/
 # Expose PostgreSQL port
 EXPOSE 5432
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD pg_isready -U geo_admin -d geo_db || exit 1
