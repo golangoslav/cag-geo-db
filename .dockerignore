@@ -1,0 +1,24 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# Environment files (will be passed via docker run -e or --env-file)
+.env
+.env.example
+.env.local
+
+# Backup files
+*.backup
+*.sql.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
