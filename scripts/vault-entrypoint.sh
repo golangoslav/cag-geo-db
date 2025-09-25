@@ -3,69 +3,65 @@ set -e
 
 echo "Starting Geo DB with Vault integration..."
 
-# Vault configuration
-VAULT_ADDR="${VAULT_ADDR:-http://cag-vault-turnkey:8200}"
-VAULT_TOKEN="${VAULT_SERVICE_TOKEN}"
-SECRET_PATH="secret/data/cag/geo-db"
-
-# Check if Vault token is provided
-if [ -n "$VAULT_TOKEN" ]; then
-    echo "Vault token found, attempting to load secrets from Vault..."
-
-    # Try to fetch secrets from Vault
-    RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/$SECRET_PATH")
-
-    # Check if response contains data
-    if echo "$RESPONSE" | grep -q '"data"'; then
-        echo "Successfully fetched secrets from Vault"
-
-        # Parse JSON and export environment variables
-        # Using jq if available, otherwise fallback to simple parsing
-        if command -v jq >/dev/null 2>&1; then
-            # Extract each secret and export as environment variable
-            export POSTGRES_DB=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_DB // empty')
-            export POSTGRES_USER=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_USER // empty')
-            export POSTGRES_PASSWORD=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_PASSWORD // empty')
-            export POSTGRES_PORT=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_PORT // empty')
-            export PGDATA=$(echo "$RESPONSE" | jq -r '.data.data.PGDATA // empty')
-            export POSTGRES_MAX_CONNECTIONS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_MAX_CONNECTIONS // empty')
-            export POSTGRES_SHARED_BUFFERS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_SHARED_BUFFERS // empty')
-            export POSTGRES_EFFECTIVE_CACHE_SIZE=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_EFFECTIVE_CACHE_SIZE // empty')
-            export POSTGRES_WORK_MEM=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_WORK_MEM // empty')
-            export POSTGRES_MAINTENANCE_WORK_MEM=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_MAINTENANCE_WORK_MEM // empty')
-            export POSTGRES_CHECKPOINT_COMPLETION_TARGET=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_CHECKPOINT_COMPLETION_TARGET // empty')
-            export POSTGRES_WAL_BUFFERS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_WAL_BUFFERS // empty')
-            export POSTGRES_DEFAULT_STATISTICS_TARGET=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_DEFAULT_STATISTICS_TARGET // empty')
-            export POSTGRES_RANDOM_PAGE_COST=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_RANDOM_PAGE_COST // empty')
-            export POSTGRES_EFFECTIVE_IO_CONCURRENCY=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_EFFECTIVE_IO_CONCURRENCY // empty')
-            export POSTGIS_ENABLE_OUTDB_RASTERS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGIS_ENABLE_OUTDB_RASTERS // empty')
-            export POSTGIS_GDAL_ENABLED_DRIVERS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGIS_GDAL_ENABLED_DRIVERS // empty')
-            export POSTGRES_LOG_STATEMENT=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_LOG_STATEMENT // empty')
-            export POSTGRES_LOG_DURATION=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_LOG_DURATION // empty')
-            export POSTGRES_LOG_MIN_DURATION_STATEMENT=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_LOG_MIN_DURATION_STATEMENT // empty')
-            export POSTGRES_INITDB_ARGS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_INITDB_ARGS // empty')
-            export POSTGRES_WAL_LEVEL=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_WAL_LEVEL // empty')
-            export POSTGRES_MAX_WAL_SENDERS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_MAX_WAL_SENDERS // empty')
-            export POSTGRES_MAX_REPLICATION_SLOTS=$(echo "$RESPONSE" | jq -r '.data.data.POSTGRES_MAX_REPLICATION_SLOTS // empty')
-
-            echo "Environment variables set from Vault:"
-            echo "  POSTGRES_USER=$POSTGRES_USER"
-            echo "  POSTGRES_DB=$POSTGRES_DB"
-            echo "  POSTGRES_PASSWORD=***hidden***"
-            echo "  POSTGRES_MAX_CONNECTIONS=$POSTGRES_MAX_CONNECTIONS"
-            echo "  POSTGIS_ENABLE_OUTDB_RASTERS=$POSTGIS_ENABLE_OUTDB_RASTERS"
-        else
-            echo "Warning: jq not found, using basic parsing"
-            # Fallback to sed/grep parsing if jq is not available
-        fi
-    else
-        echo "Warning: Failed to fetch secrets from Vault"
-        echo "Response: $RESPONSE"
-        echo "Continuing with environment variables or defaults..."
-    fi
-else
-    echo "No Vault token provided, using environment variables or defaults"
+# Check if Vault is configured
+if [ -z "$VAULT_ADDR" ] || [ -z "$VAULT_TOKEN" ]; then
+    echo "ERROR: VAULT_ADDR and VAULT_TOKEN must be set"
+    exit 1
 fi
+
+echo "Connecting to Vault at $VAULT_ADDR..."
+
+# Fetch credentials and config from Vault
+CREDS_RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/shared/credentials/geo_db")
+DB_CONFIG_RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/database/geo_db")
+
+# Check responses
+if echo "$CREDS_RESPONSE" | grep -q '"errors"'; then
+    echo "ERROR: Failed to fetch credentials from Vault"
+    echo "$CREDS_RESPONSE"
+    exit 1
+fi
+
+if echo "$DB_CONFIG_RESPONSE" | grep -q '"errors"'; then
+    echo "ERROR: Failed to fetch database config from Vault"
+    echo "$DB_CONFIG_RESPONSE"
+    exit 1
+fi
+
+# Parse and export credentials
+export POSTGRES_USER=$(echo "$CREDS_RESPONSE" | jq -r '.data.data.POSTGRES_USER')
+export POSTGRES_PASSWORD=$(echo "$CREDS_RESPONSE" | jq -r '.data.data.POSTGRES_PASSWORD')
+export POSTGRES_DB=$(echo "$CREDS_RESPONSE" | jq -r '.data.data.POSTGRES_DB')
+
+# Parse and export database configuration
+export PGDATA=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.PGDATA // "/var/lib/postgresql/data/pgdata"')
+export POSTGRES_MAX_CONNECTIONS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_MAX_CONNECTIONS // "100"')
+export POSTGRES_SHARED_BUFFERS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_SHARED_BUFFERS // "256MB"')
+export POSTGRES_EFFECTIVE_CACHE_SIZE=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_EFFECTIVE_CACHE_SIZE // "1GB"')
+export POSTGRES_WORK_MEM=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_WORK_MEM // "16MB"')
+export POSTGRES_MAINTENANCE_WORK_MEM=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_MAINTENANCE_WORK_MEM // "256MB"')
+export POSTGRES_CHECKPOINT_COMPLETION_TARGET=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_CHECKPOINT_COMPLETION_TARGET // "0.9"')
+export POSTGRES_WAL_BUFFERS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_WAL_BUFFERS // "16MB"')
+export POSTGRES_DEFAULT_STATISTICS_TARGET=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_DEFAULT_STATISTICS_TARGET // "100"')
+export POSTGRES_RANDOM_PAGE_COST=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_RANDOM_PAGE_COST // "1.1"')
+export POSTGRES_EFFECTIVE_IO_CONCURRENCY=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_EFFECTIVE_IO_CONCURRENCY // "200"')
+export POSTGIS_ENABLE_OUTDB_RASTERS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGIS_ENABLE_OUTDB_RASTERS // "1"')
+export POSTGIS_GDAL_ENABLED_DRIVERS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGIS_GDAL_ENABLED_DRIVERS // "ENABLE_ALL"')
+export POSTGRES_LOG_STATEMENT=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_LOG_STATEMENT // "all"')
+export POSTGRES_LOG_DURATION=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_LOG_DURATION // "off"')
+export POSTGRES_LOG_MIN_DURATION_STATEMENT=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_LOG_MIN_DURATION_STATEMENT // "1000"')
+export POSTGRES_INITDB_ARGS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_INITDB_ARGS // "--encoding=UTF8 --locale=en_US.utf8"')
+export POSTGRES_WAL_LEVEL=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_WAL_LEVEL // "replica"')
+export POSTGRES_MAX_WAL_SENDERS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_MAX_WAL_SENDERS // "3"')
+export POSTGRES_MAX_REPLICATION_SLOTS=$(echo "$DB_CONFIG_RESPONSE" | jq -r '.data.data.POSTGRES_MAX_REPLICATION_SLOTS // "3"')
+
+echo "Environment variables loaded from Vault:"
+echo "  POSTGRES_USER=$POSTGRES_USER"
+echo "  POSTGRES_DB=$POSTGRES_DB"
+echo "  POSTGRES_PASSWORD=***hidden***"
+echo "  POSTGRES_MAX_CONNECTIONS=$POSTGRES_MAX_CONNECTIONS"
+echo "  POSTGRES_SHARED_BUFFERS=$POSTGRES_SHARED_BUFFERS"
+echo "  POSTGIS_ENABLE_OUTDB_RASTERS=$POSTGIS_ENABLE_OUTDB_RASTERS"
 
 # Start PostgreSQL with PostGIS
 echo "Starting PostgreSQL with PostGIS..."
