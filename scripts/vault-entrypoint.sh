@@ -12,8 +12,8 @@ fi
 echo "Connecting to Vault at $VAULT_ADDR..."
 
 # Fetch credentials and config from Vault
-CREDS_RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/shared/credentials/geo_db")
-DB_CONFIG_RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/database/geo_db")
+CREDS_RESPONSE=$(curl -k -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/shared/credentials/geo_db")
+DB_CONFIG_RESPONSE=$(curl -k -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/secret/data/cag/database/geo_db")
 
 # Check responses
 if echo "$CREDS_RESPONSE" | grep -q '"errors"'; then
