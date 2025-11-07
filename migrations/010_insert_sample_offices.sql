@@ -8,12 +8,13 @@ BEGIN
     SELECT type_id INTO partner_type_id FROM office_types WHERE type_code = 'partner';
 
     INSERT INTO offices (
-        office_name, office_type_id, country, city, address,
+        office_id, office_name, office_type_id, country, city, address,
         contact_info, phone_number, latitude, longitude,
         working_hours
     ) VALUES
-    -- Bangkok offices
+    -- Bangkok offices (using deterministic UUIDs for stable IDs across deploys)
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:cash-and-go-bangkok-central'),
         'Cash&Go Bangkok Central',
         cag_type_id,
         'Thailand',
@@ -26,6 +27,7 @@ BEGIN
         '{"monday": "09:00-18:00", "tuesday": "09:00-18:00", "wednesday": "09:00-18:00", "thursday": "09:00-18:00", "friday": "09:00-18:00", "saturday": "10:00-16:00"}'::jsonb
     ),
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:partner-exchange-siam-square'),
         'Partner Exchange Siam Square',
         partner_type_id,
         'Thailand',
@@ -38,6 +40,7 @@ BEGIN
         '{"monday": "08:30-19:00", "tuesday": "08:30-19:00", "wednesday": "08:30-19:00", "thursday": "08:30-19:00", "friday": "08:30-19:00", "saturday": "09:00-17:00", "sunday": "10:00-15:00"}'::jsonb
     ),
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:cash-and-go-chatuchak'),
         'Cash&Go Chatuchak',
         cag_type_id,
         'Thailand',
@@ -51,6 +54,7 @@ BEGIN
     ),
     -- Phuket offices
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:cash-and-go-phuket-patong'),
         'Cash&Go Phuket Patong',
         cag_type_id,
         'Thailand',
@@ -63,6 +67,7 @@ BEGIN
         '{"monday": "09:00-20:00", "tuesday": "09:00-20:00", "wednesday": "09:00-20:00", "thursday": "09:00-20:00", "friday": "09:00-20:00", "saturday": "09:00-20:00", "sunday": "10:00-18:00"}'::jsonb
     ),
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:partner-exchange-phuket-town'),
         'Partner Exchange Phuket Town',
         partner_type_id,
         'Thailand',
@@ -76,6 +81,7 @@ BEGIN
     ),
     -- Chiang Mai offices
     (
+        uuid_generate_v5(uuid_ns_oid(), 'office:cash-and-go-chiang-mai-old-city'),
         'Cash&Go Chiang Mai Old City',
         cag_type_id,
         'Thailand',
@@ -87,5 +93,5 @@ BEGIN
         98.993128,
         '{"monday": "09:00-18:00", "tuesday": "09:00-18:00", "wednesday": "09:00-18:00", "thursday": "09:00-18:00", "friday": "09:00-18:00", "saturday": "10:00-16:00"}'::jsonb
     )
-    ON CONFLICT DO NOTHING;
+    ON CONFLICT (office_id) DO NOTHING;
 END $$;

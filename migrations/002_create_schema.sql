@@ -1,5 +1,4 @@
 -- Create database schema
-CREATE SCHEMA IF NOT EXISTS geo;
-
--- Set schema
-SET search_path TO geo, public;
+-- NOTE: Using public schema for simplicity and compatibility
+-- All tables will be created in public schema
+SET search_path TO public;
