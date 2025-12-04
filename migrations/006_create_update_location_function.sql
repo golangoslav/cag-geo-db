@@ -1,5 +1,5 @@
 -- Create function to automatically update location from lat/lng
-CREATE OR REPLACE FUNCTION update_location_from_coordinates()
+CREATE FUNCTION update_location_from_coordinates()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN
