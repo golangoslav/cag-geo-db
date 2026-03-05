@@ -49,10 +49,10 @@ BEGIN
         o.is_active,
         o.created_at,
         o.updated_at,
-        ROUND(ST_Distance(
+        ROUND((ST_Distance(
             o.location::geography,
             ST_SetSRID(ST_MakePoint(user_lon, user_lat), 4326)::geography
-        ) / 1000, 2) AS distance_km
+        ) / 1000)::numeric, 2) AS distance_km
     FROM offices o
     JOIN office_types ot ON o.office_type_id = ot.type_id
     WHERE

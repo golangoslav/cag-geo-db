@@ -23,9 +23,8 @@ if echo "$CREDS_RESPONSE" | grep -q '"errors"'; then
 fi
 
 if echo "$DB_CONFIG_RESPONSE" | grep -q '"errors"'; then
-    echo "ERROR: Failed to fetch database config from Vault"
-    echo "$DB_CONFIG_RESPONSE"
-    exit 1
+    echo "WARN: Database tuning config not found in Vault, using defaults"
+    DB_CONFIG_RESPONSE='{"data":{"data":{}}}'
 fi
 
 # Parse and export credentials
