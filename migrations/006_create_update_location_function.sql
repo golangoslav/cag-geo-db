@@ -1,5 +1,5 @@
 -- Create function to automatically update location from lat/lng
-CREATE FUNCTION update_location_from_coordinates()
+CREATE OR REPLACE FUNCTION update_location_from_coordinates()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN
@@ -10,6 +10,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger to update location automatically
+DROP TRIGGER IF EXISTS update_office_location ON offices;
 CREATE TRIGGER update_office_location
     BEFORE INSERT OR UPDATE OF latitude, longitude ON offices
     FOR EACH ROW

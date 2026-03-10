@@ -1,5 +1,5 @@
 -- Function to find nearest offices with all fields
-CREATE FUNCTION find_nearest_offices(
+CREATE OR REPLACE FUNCTION find_nearest_offices(
     user_lat DECIMAL,
     user_lon DECIMAL,
     max_distance_km DECIMAL DEFAULT 50,
@@ -9,6 +9,8 @@ RETURNS TABLE (
     office_id UUID,
     office_name TEXT,
     office_type office_types.type_code%TYPE,
+    office_type_color VARCHAR(7),
+    office_type_name VARCHAR(100),
     country VARCHAR(100),
     city VARCHAR(100),
     address TEXT,
@@ -33,6 +35,8 @@ BEGIN
         o.office_id,
         o.office_name,
         ot.type_code AS office_type,
+        ot.color AS office_type_color,
+        ot.type_name AS office_type_name,
         o.country,
         o.city,
         o.address,

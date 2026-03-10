@@ -1,5 +1,5 @@
 -- Create function to update updated_at timestamp
-CREATE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
@@ -8,6 +8,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger for updated_at
+DROP TRIGGER IF EXISTS update_offices_updated_at ON offices;
 CREATE TRIGGER update_offices_updated_at
     BEFORE UPDATE ON offices
     FOR EACH ROW

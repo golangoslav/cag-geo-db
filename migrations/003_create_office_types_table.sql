@@ -3,6 +3,8 @@ CREATE TABLE office_types (
     type_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     type_code VARCHAR(50) UNIQUE NOT NULL,
     type_name VARCHAR(100) NOT NULL,
+    color VARCHAR(7) NOT NULL DEFAULT '#6B7280',
     description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

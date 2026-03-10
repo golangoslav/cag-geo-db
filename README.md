@@ -1,99 +1,99 @@
-# geo_db — Geographic Office Database
+# geo_db — База данных географии офисов
 
-## Overview
+## Обзор
 
-`geo_db` is the spatial database for the CAG Ecosystem, storing all information about currency exchange offices (both official Cash&Go offices and partner offices). It uses the PostGIS extension for efficient geographic proximity queries, enabling clients to find the nearest exchange office from their current location.
+`geo_db` — это пространственная база данных CAG Ecosystem, хранящая всю информацию об офисах обмена валют (как официальных офисах Cash&Go, так и партнёрских). Она использует расширение PostGIS для эффективных запросов географической близости, позволяя клиентам найти ближайший пункт обмена от их текущего местоположения.
 
-The database serves two primary roles:
+База данных выполняет две основные роли:
 
-1. **Office Catalog**: Persistent storage for all office metadata — name, address, contact details, working hours, Google Maps integration.
-2. **Geospatial Queries**: Efficient radius-based office lookup using PostGIS geometry types and spatial indexes, returning results ordered by real-world distance in kilometers.
+1. **Каталог офисов**: Постоянное хранилище всех метаданных офисов — название, адрес, контактные данные, часы работы, интеграция с Google Maps.
+2. **Геопространственные запросы**: Эффективный поиск офисов по радиусу с использованием типов геометрии PostGIS и пространственных индексов, возвращающий результаты, упорядоченные по реальному расстоянию в километрах.
 
 ---
 
-## Services That Use This DB
+## Сервисы, использующие эту БД
 
-| Service | Access Pattern |
+| Сервис | Паттерн доступа |
 |---|---|
-| `geo-service` (port 8082) | Primary owner — full read/write, uses all tables and functions |
-| `office-service` (port 8090) | Read/write — also connects to geo_db for office management |
-| `transaction-service` (port 8084) | Read-only (via currency_cache) — office UUIDs stored in invoices as foreign keys without enforced FK |
-| `crm-requests-service` (port 8086) | Read-only references — office IDs stored in invoices |
+| `geo-service` (порт 8082) | Основной владелец — полное чтение/запись, использует все таблицы и функции |
+| `office-service` (порт 8090) | Чтение/запись — также подключается к geo_db для управления офисами |
+| `transaction-service` (порт 8084) | Только чтение (через currency_cache) — UUID офисов хранятся в инвойсах как внешние ключи без принудительного FK |
+| `crm-requests-service` (порт 8086) | Ссылки только для чтения — ID офисов хранятся в инвойсах |
 
 ---
 
-## PostgreSQL Extensions
+## Расширения PostgreSQL
 
-| Extension | Version | Purpose |
+| Расширение | Версия | Назначение |
 |---|---|---|
-| `uuid-ossp` | — | UUID generation functions (`uuid_generate_v4`, `uuid_generate_v5`) |
-| `postgis` | 3.4 (postgis/postgis:16-3.4-alpine) | Spatial data types, geometry operations, distance calculations |
+| `uuid-ossp` | — | Функции генерации UUID (`uuid_generate_v4`, `uuid_generate_v5`) |
+| `postgis` | 3.4 (postgis/postgis:16-3.4-alpine) | Пространственные типы данных, операции с геометрией, расчёт расстояний |
 
 ---
 
-## Tables
+## Таблицы
 
 ### `office_types`
 
-Lookup table for office categories.
+Справочная таблица категорий офисов.
 
-| Column | Type | Constraints | Description |
+| Столбец | Тип | Ограничения | Описание |
 |---|---|---|---|
-| `type_id` | UUID | PK, DEFAULT uuid_generate_v4() | Unique identifier |
-| `type_code` | VARCHAR(50) | UNIQUE NOT NULL | Short code, e.g. `cag`, `partner` |
-| `type_name` | VARCHAR(100) | NOT NULL | Human-readable name, e.g. `Cash & Go` |
-| `description` | TEXT | — | Optional description |
-| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Creation timestamp |
+| `type_id` | UUID | PK, DEFAULT uuid_generate_v4() | Уникальный идентификатор |
+| `type_code` | VARCHAR(50) | UNIQUE NOT NULL | Короткий код, напр. `cag`, `partner` |
+| `type_name` | VARCHAR(100) | NOT NULL | Человекочитаемое название, напр. `Cash & Go` |
+| `description` | TEXT | — | Необязательное описание |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Временная метка создания |
 
-**Seed data** (migration 009): Two deterministic types using UUID v5:
-- `cag` — Official Cash&Go offices
-- `partner` — Partner exchange offices
+**Начальные данные** (миграция 009): Два детерминированных типа с использованием UUID v5:
+- `cag` — Официальные офисы Cash&Go
+- `partner` — Партнёрские обменные пункты
 
 ---
 
 ### `offices`
 
-The main table storing all exchange office records with full geographic data.
+Основная таблица, хранящая все записи обменных пунктов с полными географическими данными.
 
-| Column | Type | Constraints | Description |
+| Столбец | Тип | Ограничения | Описание |
 |---|---|---|---|
-| `office_id` | UUID | PK, DEFAULT uuid_generate_v4() | Unique identifier |
-| `office_name` | TEXT | NOT NULL | Display name of the office |
-| `office_type_id` | UUID | NOT NULL, FK → office_types(type_id) ON DELETE RESTRICT | Office category reference |
-| `country` | VARCHAR(100) | NOT NULL | Country name |
-| `city` | VARCHAR(100) | NOT NULL | City name |
-| `address` | TEXT | NOT NULL | Full street address |
-| `contact_info` | TEXT | — | Contact person name |
-| `tg_info` | BIGINT | CHECK (> 0 OR NULL) | Telegram user ID for the contact person |
-| `phone_number` | VARCHAR(50) | CHECK (matches phone regex OR NULL) | Contact phone |
-| `location` | GEOMETRY(Point, 4326) | — | PostGIS point geometry (auto-populated from lat/lon by trigger) |
-| `latitude` | DECIMAL(10,8) | CHECK (−90 to 90) | Latitude in decimal degrees |
-| `longitude` | DECIMAL(11,8) | CHECK (−180 to 180) | Longitude in decimal degrees |
-| `google_place_id` | VARCHAR(255) | — | Google Places API place ID |
-| `google_maps_url` | TEXT | — | Direct Google Maps URL |
-| `google_rating` | DECIMAL(2,1) | CHECK (0–5 OR NULL) | Google rating |
-| `google_user_total` | INTEGER | CHECK (≥ 0 OR NULL) | Number of Google reviews |
-| `working_hours` | JSONB | — | Working hours by day, e.g. `{"monday": "09:00-18:00", "saturday": "10:00-16:00"}` |
-| `is_active` | BOOLEAN | DEFAULT true | Whether office is currently operational |
-| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Creation timestamp |
-| `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Last update (maintained by trigger) |
+| `office_id` | UUID | PK, DEFAULT uuid_generate_v4() | Уникальный идентификатор |
+| `office_name` | TEXT | NOT NULL | Отображаемое название офиса |
+| `office_type_id` | UUID | NOT NULL, FK → office_types(type_id) ON DELETE RESTRICT | Ссылка на категорию офиса |
+| `country` | VARCHAR(100) | NOT NULL | Название страны |
+| `city` | VARCHAR(100) | NOT NULL | Название города |
+| `address` | TEXT | NOT NULL | Полный адрес |
+| `contact_info` | TEXT | — | Имя контактного лица |
+| `tg_info` | BIGINT | CHECK (> 0 OR NULL) | ID пользователя Telegram контактного лица |
+| `phone_number` | VARCHAR(50) | CHECK (соответствует регулярному выражению телефона OR NULL) | Контактный телефон |
+| `location` | GEOMETRY(Point, 4326) | — | Точечная геометрия PostGIS (автоматически заполняется из lat/lon триггером) |
+| `latitude` | DECIMAL(10,8) | CHECK (от -90 до 90) | Широта в десятичных градусах |
+| `longitude` | DECIMAL(11,8) | CHECK (от -180 до 180) | Долгота в десятичных градусах |
+| `google_place_id` | VARCHAR(255) | — | ID места из Google Places API |
+| `google_maps_url` | TEXT | — | Прямая ссылка на Google Maps |
+| `google_rating` | DECIMAL(2,1) | CHECK (0–5 OR NULL) | Рейтинг Google |
+| `google_user_total` | INTEGER | CHECK (>= 0 OR NULL) | Количество отзывов Google |
+| `working_hours` | JSONB | — | Часы работы по дням, напр. `{"monday": "09:00-18:00", "saturday": "10:00-16:00"}` |
+| `is_active` | BOOLEAN | DEFAULT true | Работает ли офис в данный момент |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Временная метка создания |
+| `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Последнее обновление (поддерживается триггером) |
 
-**CHECK constraints:**
-- `valid_latitude`: latitude between −90 and 90
-- `valid_longitude`: longitude between −180 and 180
-- `valid_phone`: phone number matches `^[+]?[0-9\s\-\(\)]+$` or is NULL
-- `valid_tg_info`: tg_info > 0 or NULL
-- `valid_google_rating`: google_rating between 0 and 5 or NULL
-- `valid_google_user_total`: google_user_total >= 0 or NULL
+**CHECK-ограничения:**
+- `valid_latitude`: широта между -90 и 90
+- `valid_longitude`: долгота между -180 и 180
+- `valid_phone`: номер телефона соответствует `^[+]?[0-9\s\-\(\)]+$` или NULL
+- `valid_tg_info`: tg_info > 0 или NULL
+- `valid_google_rating`: google_rating между 0 и 5 или NULL
+- `valid_google_user_total`: google_user_total >= 0 или NULL
 
-**Foreign keys:**
+**Внешние ключи:**
 - `fk_office_type` → `office_types(type_id)` ON DELETE RESTRICT
 
-**Indexes:**
+**Индексы:**
 
-| Index | Type | Columns | Condition |
+| Индекс | Тип | Столбцы | Условие |
 |---|---|---|---|
-| `idx_offices_location` | GIST (spatial) | `location` | — |
+| `idx_offices_location` | GIST (пространственный) | `location` | — |
 | `idx_offices_country` | BTREE | `country` | — |
 | `idx_offices_city` | BTREE | `city` | — |
 | `idx_offices_office_type_id` | BTREE | `office_type_id` | — |
@@ -103,71 +103,71 @@ The main table storing all exchange office records with full geographic data.
 
 ---
 
-## Functions and Triggers
+## Функции и триггеры
 
-### `update_location_from_coordinates()` — Trigger Function
+### `update_location_from_coordinates()` — Триггерная функция
 
-**Returns:** TRIGGER
+**Возвращает:** TRIGGER
 
-**Description:** Automatically computes the PostGIS `GEOMETRY(Point, 4326)` column from `latitude` and `longitude` using `ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)`. Runs BEFORE INSERT OR UPDATE OF latitude, longitude on the `offices` table.
+**Описание:** Автоматически вычисляет столбец PostGIS `GEOMETRY(Point, 4326)` из `latitude` и `longitude` с помощью `ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)`. Выполняется BEFORE INSERT OR UPDATE OF latitude, longitude в таблице `offices`.
 
-This ensures the spatial index column `location` is always synchronized with the human-readable decimal degree columns. Only runs if both latitude and longitude are non-null.
+Это гарантирует, что столбец пространственного индекса `location` всегда синхронизирован с человекочитаемыми столбцами десятичных градусов. Выполняется только если и широта, и долгота не равны NULL.
 
-**Trigger:** `update_office_location` — BEFORE INSERT OR UPDATE OF latitude, longitude ON offices, FOR EACH ROW.
-
----
-
-### `update_updated_at_column()` — Trigger Function
-
-**Returns:** TRIGGER
-
-**Description:** Sets `NEW.updated_at = CURRENT_TIMESTAMP` on every row update. Generic timestamp maintenance function.
-
-**Trigger:** `update_offices_updated_at` — BEFORE UPDATE ON offices, FOR EACH ROW.
+**Триггер:** `update_office_location` — BEFORE INSERT OR UPDATE OF latitude, longitude ON offices, FOR EACH ROW.
 
 ---
 
-### `find_nearest_offices(user_lat, user_lon, max_distance_km, limit_count)` — Query Function
+### `update_updated_at_column()` — Триггерная функция
 
-**Parameters:**
-- `user_lat DECIMAL` — User's latitude
-- `user_lon DECIMAL` — User's longitude
-- `max_distance_km DECIMAL DEFAULT 50` — Maximum search radius in kilometers
-- `limit_count INTEGER DEFAULT 10` — Maximum number of results
+**Возвращает:** TRIGGER
 
-**Returns:** TABLE with columns: `office_id`, `office_name`, `office_type` (type_code), `country`, `city`, `address`, `contact_info`, `tg_info`, `phone_number`, `latitude`, `longitude`, `working_hours`, `google_place_id`, `google_maps_url`, `google_rating`, `google_user_total`, `is_active`, `created_at`, `updated_at`, `distance_km`
+**Описание:** Устанавливает `NEW.updated_at = CURRENT_TIMESTAMP` при каждом обновлении строки. Универсальная функция поддержки временных меток.
 
-**Description:** The primary search function used by the Mini App "Find nearest office" feature. Performs a spatial radius query using `ST_DWithin` on geography types (which automatically handles Earth curvature), then joins to `office_types` for the type code, and computes the distance in kilometers as a rounded NUMERIC value. Results are ordered by distance ascending and filtered to `is_active = true` only.
-
-The function uses the geography type cast (`::geography`) rather than geometry for accurate real-world distance calculations.
-
-**Called by:** `geo-service` and `office-service` — the primary office search endpoint.
+**Триггер:** `update_offices_updated_at` — BEFORE UPDATE ON offices, FOR EACH ROW.
 
 ---
 
-## Seed Data
+### `find_nearest_offices(user_lat, user_lon, max_distance_km, limit_count)` — Функция запроса
 
-Migration 010 inserts 6 sample offices across Thailand:
-- **Bangkok**: Cash&Go Bangkok Central, Partner Exchange Siam Square, Cash&Go Chatuchak
-- **Phuket**: Cash&Go Phuket Patong, Partner Exchange Phuket Town
-- **Chiang Mai**: Cash&Go Chiang Mai Old City
+**Параметры:**
+- `user_lat DECIMAL` — Широта пользователя
+- `user_lon DECIMAL` — Долгота пользователя
+- `max_distance_km DECIMAL DEFAULT 50` — Максимальный радиус поиска в километрах
+- `limit_count INTEGER DEFAULT 10` — Максимальное количество результатов
 
-All offices use UUID v5 for deterministic IDs stable across database recreations.
+**Возвращает:** TABLE со столбцами: `office_id`, `office_name`, `office_type` (type_code), `country`, `city`, `address`, `contact_info`, `tg_info`, `phone_number`, `latitude`, `longitude`, `working_hours`, `google_place_id`, `google_maps_url`, `google_rating`, `google_user_total`, `is_active`, `created_at`, `updated_at`, `distance_km`
+
+**Описание:** Основная функция поиска, используемая фичей Mini App "Найти ближайший офис". Выполняет пространственный запрос по радиусу с помощью `ST_DWithin` по типам географии (что автоматически учитывает кривизну Земли), затем присоединяет `office_types` для получения кода типа и вычисляет расстояние в километрах как округлённое значение NUMERIC. Результаты упорядочены по возрастанию расстояния и отфильтрованы только по `is_active = true`.
+
+Функция использует приведение к типу географии (`::geography`) вместо геометрии для точных расчётов расстояний в реальном мире.
+
+**Вызывается:** `geo-service` и `office-service` — основной эндпоинт поиска офисов.
 
 ---
 
-## Migration History
+## Начальные данные
 
-| Migration | Description |
+Миграция 010 вставляет 6 примеров офисов по Таиланду:
+- **Бангкок**: Cash&Go Bangkok Central, Partner Exchange Siam Square, Cash&Go Chatuchak
+- **Пхукет**: Cash&Go Phuket Patong, Partner Exchange Phuket Town
+- **Чиангмай**: Cash&Go Chiang Mai Old City
+
+Все офисы используют UUID v5 для детерминированных ID, стабильных при пересоздании базы данных.
+
+---
+
+## История миграций
+
+| Миграция | Описание |
 |---|---|
-| 001 | Enable `uuid-ossp` and `postgis` extensions |
-| 002 | Set `search_path TO public` |
-| 003 | Create `office_types` table |
-| 004 | Create `offices` table with all columns and constraints |
-| 005 | Create indexes including PostGIS spatial GIST index |
-| 006 | Create `update_location_from_coordinates()` function and trigger |
-| 007 | Create `update_updated_at_column()` function and trigger |
-| 008 | Create `find_nearest_offices()` search function |
-| 009 | Insert seed office types (`cag`, `partner`) with deterministic UUIDs |
-| 010 | Insert 6 sample offices across Bangkok, Phuket, Chiang Mai |
-| 011 | Add `COMMENT ON` documentation for tables and columns |
+| 001 | Подключение расширений `uuid-ossp` и `postgis` |
+| 002 | Установка `search_path TO public` |
+| 003 | Создание таблицы `office_types` |
+| 004 | Создание таблицы `offices` со всеми столбцами и ограничениями |
+| 005 | Создание индексов, включая пространственный GIST-индекс PostGIS |
+| 006 | Создание функции `update_location_from_coordinates()` и триггера |
+| 007 | Создание функции `update_updated_at_column()` и триггера |
+| 008 | Создание функции поиска `find_nearest_offices()` |
+| 009 | Вставка начальных типов офисов (`cag`, `partner`) с детерминированными UUID |
+| 010 | Вставка 6 примеров офисов по Бангкоку, Пхукету, Чиангмаю |
+| 011 | Добавление документации `COMMENT ON` для таблиц и столбцов |

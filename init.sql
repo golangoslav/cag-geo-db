@@ -18,5 +18,5 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'geo_db')\gexec
 \i /docker-entrypoint-initdb.d/migrations/007_create_update_timestamp_function.sql
 \i /docker-entrypoint-initdb.d/migrations/008_create_find_nearest_offices_function.sql
 \i /docker-entrypoint-initdb.d/migrations/009_insert_office_types.sql
-\i /docker-entrypoint-initdb.d/migrations/010_insert_sample_offices.sql
+-- 010: Removed (sample offices)
 \i /docker-entrypoint-initdb.d/migrations/011_add_table_comments.sql
