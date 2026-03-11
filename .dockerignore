@@ -22,3 +22,8 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+# Dev / Docker files
+Dockerfile
+Dockerfile.dev
+.dockerignore
+scripts/
